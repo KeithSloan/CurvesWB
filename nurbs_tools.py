@@ -481,8 +481,141 @@ def reparametrize(c, p1, p2):
         c = join_curves(curves)
         return(c)
 
+class Point4D(object):
+    def __init__(self, pt, w):
+        self.x = pt.x * w
+        self.y = pt.y * w
+        self.z = pt.z * w
+        self.w = w
+    def __repr__(self):
+        return("Point4D(%s,%s)"%(str(FreeCAD.Vector(self.x,self.y,self.z)),self.w))
+    def __add__(self, pt4):
+        return(Point4D(FreeCAD.Vector(self.x+pt4.x,self.y+pt4.y,self.z+pt4.z)),self.w+pt4.w))
+        self.x += pt4.x
+        self.y += pt4.y
+        self.z += pt4.z
+        self.w += pt4.w
+    def __sub__(self, pt4):
+        return(Point4D(FreeCAD.Vector(self.x-pt4.x,self.y-pt4.y,self.z-pt4.z)),self.w-pt4.w))
+        self.x -= pt4.x
+        self.y -= pt4.y
+        self.z -= pt4.z
+        self.w -= pt4.w
+    def __mul__(self, m):
+        self.x *= m
+        self.y *= m
+        self.z *= m
+        self.w *= m
+    def __div__(self, m):
+        if m == 0:
+            return()
+        self.x /= m
+        self.y /= m
+        self.z /= m
+        self.w /= m
+    def __radd__(self, pt4):
+        self.x += pt4.x
+        self.y += pt4.y
+        self.z += pt4.z
+        self.w += pt4.w
+    def __rmul__(self, m):
+        self.x *= m
+        self.y *= m
+        self.z *= m
+        self.w *= m
 
 
+def distance4D(p1,p2):
+    x2 = pow(p2[0]-p1[0], 2)
+    y2 = pow(p2[1]-p1[1], 2)
+    z2 = pow(p2[2]-p1[2], 2)
+    w2 = pow(p2[3]-p1[3], 2)
+    return(pow(x2 + y2 + z2 + w2, 0.5))
+
+def remove_knot(curve, index, dest_mult, tol):
+    """ Remove knot of index 'index' to multiplicity 'dest_mult', with tolerance 'tol'.
+    Nurbs Book Algo A5.8 p.185
+    """
+    # initialize the book algo variables
+    Pw = [Point4D(z[0],z[1]) for z in zip(curve.getPoles(),curve.getWeights())]
+    u = curve.getKnot(index)
+    U = curve.KnotSequence
+    s = int(curve.getMultiplicity(index))
+    #r = U.index(index)
+    r = len(U)-1-U[::-1].index(u) # index of the last knot u in KnotSequence U
+    num = s - dest_mult
+    n = int(curve.NbPoles)
+    p = int(curve.Degree)
+    temp = [0. for x in range(n)]
+    
+    # Start of the book algo
+    m = n+p+1
+    ord = p+1
+    fout = (2.0*r-s-p)/2 # or int((2*r-s-p)/2)
+    last = r-s
+    first = r-p
+    for t in range(num):
+        off = first-1
+        temp[0] = Pw[off]
+        temp[last+1-off] = Pw[last+1]
+        i = first
+        j = last
+        ii = 1
+        jj = last - off
+        remflag = 0
+        while (j-i) > t:
+            alfi = (u-U[i]) / (U[i+ord+t]-U[i])
+            alfj = (u-U[j-t]) / (U[j+ord]-U[j-t])
+            temp[ii] = (Pw[i] - (1.0-alfi) * temp[ii-1]) / alfi
+            temp[jj] = (Pw[j] - alfj * temp[jj+1]) / (1.0-alfj)
+            i = i+1
+            ii = ii+1
+            j = j-1
+            jj = jj-1
+        if (j-i) < t:
+            if distance4D(temp[ii-1],temp[jj+1]) <= tol:
+                remflag = 1
+        else:
+            alfi = (u-U[i]) / (U[i+ord+t]-U[i])
+            print(alfi)
+            print(temp[ii+t+1])
+            print(temp[ii-1])
+            print(alfi*temp[ii+t+1])
+            print()
+            point = alfi*temp[ii+t+1] + (1.0-alfi)*temp[ii-1]
+            if distance4D(Pw[i],point) <= tol:
+                remflag = 1
+        if remflag == 0:
+            break
+        else:
+            i = first
+            j = last
+            while (j-i) > t:
+                Pw[i] = temp[i-off]
+                Pw[j] = temp[j-off]
+                i = i+1
+                j = j-1
+        first = first-1
+        last = last+1
+    if t == 0:
+        return(t,U,Pw)
+    for k in range(r+1,m+1):
+        U[k-t] = U[k]
+    j = fout
+    i = j
+    for k in range(1,t):
+        if k%2 == 1:
+            i = i+1
+        else:
+            j = j-1
+    for k in range(i+1,n+1):
+        Pw[j] = Pw[k]
+        j = j+1
+    return(t,U,Pw)
+
+
+            
+                
 
 def test():
     bb = BsplineBasis()
