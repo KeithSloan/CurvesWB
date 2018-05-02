@@ -1,3 +1,6 @@
+import FreeCADGui
+import Part
+
 def curve_to_script(i,c):
     com = ["import FreeCAD",
            "from FreeCAD import Vector",

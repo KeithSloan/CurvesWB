@@ -13,7 +13,7 @@ import Part
 #debug = _utils.doNothing
 
 def error(s):
-    FreeCAD.Console.PrintError(s)
+    FreeCAD.Console.PrintError("%s\n"%s)
 
 class BsplineBasis(object):
     """Computes basis functions of a bspline curve, and its derivatives"""
@@ -273,6 +273,16 @@ def createKnotsMults(degree, nbPoles):
         mults = [degree+1] + [1 for k in range(nbIntKnots)] + [degree+1]
         return(knots, mults)
 
+def knotSeqToKnotsMults(seq):
+    """create knots and mults lists from a knot sequence."""
+    knots = list()
+    mults = list()
+    for k in seq:
+        if not k in knots:
+            knots.append(k)
+            mults.append(seq.count(k))
+    return(knots,mults)
+
 # ---------------------------------------------------
 
 def bspline_copy(bs, reverse = False, scale = 1.0):
@@ -454,7 +464,8 @@ def join_curve(c1,c2):
     new_mults.append(c1.Degree)
     new_mults.extend(c2.getMultiplicities()[1:])
     knots1 = c1.getKnots()
-    knots2 = [knots1[-1] + k for k in c2.getKnots()]
+    sk = c2.getKnots()
+    knots2 = [knots1[-1] - sk[0] + k for k in sk]
     new_knots = knots1
     new_knots.extend(knots2[1:])
     print("poles   -> %r"%new_poles)
@@ -481,68 +492,143 @@ def reparametrize(c, p1, p2):
         c = join_curves(curves)
         return(c)
 
-class Point4D(object):
-    def __init__(self, pt, w):
-        self.x = pt.x * w
-        self.y = pt.y * w
-        self.z = pt.z * w
-        self.w = w
-    def __repr__(self):
-        return("Point4D(%s,%s)"%(str(FreeCAD.Vector(self.x,self.y,self.z)),self.w))
-    def __add__(self, pt4):
-        return(Point4D(FreeCAD.Vector(self.x+pt4.x,self.y+pt4.y,self.z+pt4.z)),self.w+pt4.w))
-        self.x += pt4.x
-        self.y += pt4.y
-        self.z += pt4.z
-        self.w += pt4.w
-    def __sub__(self, pt4):
-        return(Point4D(FreeCAD.Vector(self.x-pt4.x,self.y-pt4.y,self.z-pt4.z)),self.w-pt4.w))
-        self.x -= pt4.x
-        self.y -= pt4.y
-        self.z -= pt4.z
-        self.w -= pt4.w
-    def __mul__(self, m):
-        self.x *= m
-        self.y *= m
-        self.z *= m
-        self.w *= m
-    def __div__(self, m):
-        if m == 0:
+class Vector4d(object):
+    def __init__(self, pt=(0,0,0,1)):
+        if isinstance(pt, Vector4d):
+            self.x  = float(pt.x)
+            self.y  = float(pt.y)
+            self.z  = float(pt.z)
+            self.w  = float(pt.w)
+        elif isinstance(pt, (list,tuple)):
+            if len(pt) == 4:
+                # pt = (x,y,z,w)
+                self.x  = float(pt[0])
+                self.y  = float(pt[1])
+                self.z  = float(pt[2])
+                self.w  = float(pt[3])
+            elif len(pt) == 3:
+                # pt = (x,y,z) -> w=1
+                self.x  = float(pt[0])
+                self.y  = float(pt[1])
+                self.z  = float(pt[2])
+                self.w  = 1.0
+            elif len(pt) == 2:
+                # pt = (Vector, w)
+                self.x  = float(pt[0].x)
+                self.y  = float(pt[0].y)
+                self.z  = float(pt[0].z)
+                self.w  = float(pt[1])
+        else:
+            self.x  = 0.
+            self.y  = 0.
+            self.z  = 0.
+            self.w  = 1.
+        self.update_homogeneous()
+
+    def update_homogeneous(self):
+        self.wx = float(self.x) * self.w
+        self.wy = float(self.y) * self.w
+        self.wz = float(self.z) * self.w
+    def update_non_homogeneous(self):
+        if self.w == 0:
+            error("Weight is null.")
             return()
-        self.x /= m
-        self.y /= m
-        self.z /= m
-        self.w /= m
+        self.x = float(self.wx) / self.w
+        self.y = float(self.wy) / self.w
+        self.z = float(self.wz) / self.w
+
+    def __repr__(self):
+        return("Vector4d((%s,%s,%s,%s))"%(self.x,self.y,self.z,self.w))
+
+    def __str__(self):
+        return("Vector4d((%s,%s,%s,%s)) -> (%s,%s,%s,%s)"%(self.x,self.y,self.z,self.w,self.wx,self.wy,self.wz,self.w))
+
+    def __add__(self, pt4):
+        newpt = Vector4d(self)
+        newpt.wx += pt4.wx
+        newpt.wy += pt4.wy
+        newpt.wz += pt4.wz
+        newpt.w  += pt4.w
+        newpt.update_non_homogeneous()
+        return(newpt)
+
     def __radd__(self, pt4):
-        self.x += pt4.x
-        self.y += pt4.y
-        self.z += pt4.z
-        self.w += pt4.w
-    def __rmul__(self, m):
-        self.x *= m
-        self.y *= m
-        self.z *= m
-        self.w *= m
+        newpt = Vector4d(self)
+        newpt.wx += pt4.wx
+        newpt.wy += pt4.wy
+        newpt.wz += pt4.wz
+        newpt.w  += pt4.w
+        newpt.update_non_homogeneous()
+        return(newpt)
 
+    def __sub__(self, pt4):
+        newpt = Vector4d(self)
+        newpt.wx -= pt4.wx
+        newpt.wy -= pt4.wy
+        newpt.wz -= pt4.wz
+        newpt.w  -= pt4.w
+        newpt.update_non_homogeneous()
+        return(newpt)
 
-def distance4D(p1,p2):
-    x2 = pow(p2[0]-p1[0], 2)
-    y2 = pow(p2[1]-p1[1], 2)
-    z2 = pow(p2[2]-p1[2], 2)
-    w2 = pow(p2[3]-p1[3], 2)
-    return(pow(x2 + y2 + z2 + w2, 0.5))
+    def __mul__(self, mu):
+        newpt = Vector4d(self)
+        m = float(mu)
+        newpt.wx *= m
+        newpt.wy *= m
+        newpt.wz *= m
+        newpt.w  *= m
+        newpt.update_non_homogeneous()
+        return(newpt)
+
+    def __rmul__(self, mu):
+        newpt = Vector4d(self)
+        m = float(mu)
+        newpt.wx *= m
+        newpt.wy *= m
+        newpt.wz *= m
+        newpt.w  *= m
+        newpt.update_non_homogeneous()
+        return(newpt)
+
+    def __div__(self, mu):
+        if mu == 0:
+            error("Division by zero.")
+            return()
+        newpt = Vector4d(self)
+        m = float(mu)
+        newpt.wx /= m
+        newpt.wy /= m
+        newpt.wz /= m
+        newpt.w  /= m
+        newpt.update_non_homogeneous()
+        return(newpt)
+
+    def distanceToPoint(self, other):
+        x2 = pow(self.wx - other.wx, 2)
+        y2 = pow(self.wy - other.wy, 2)
+        z2 = pow(self.wz - other.wz, 2)
+        w2 = pow(self.w  - other.w,  2)
+        return(pow(x2 + y2 + z2 + w2, 0.5))
+    
+    def vector3d(self):
+        return(FreeCAD.Vector(self.x, self.y, self.z))
+    
+    def weight(self):
+        return(self.w)
 
 def remove_knot(curve, index, dest_mult, tol):
     """ Remove knot of index 'index' to multiplicity 'dest_mult', with tolerance 'tol'.
     Nurbs Book Algo A5.8 p.185
     """
     # initialize the book algo variables
-    Pw = [Point4D(z[0],z[1]) for z in zip(curve.getPoles(),curve.getWeights())]
+    #Pw = [Vector4d((z[0],z[1])) for z in zip(curve.getPoles(),curve.getWeights())]
+    Pw = curve.getPoles()
     u = curve.getKnot(index)
     U = curve.KnotSequence
     s = int(curve.getMultiplicity(index))
-    #r = U.index(index)
+    #r = U.index(index-1)
     r = len(U)-1-U[::-1].index(u) # index of the last knot u in KnotSequence U
+    error("r=%d"%r)
     num = s - dest_mult
     n = int(curve.NbPoles)
     p = int(curve.Degree)
@@ -551,10 +637,11 @@ def remove_knot(curve, index, dest_mult, tol):
     # Start of the book algo
     m = n+p+1
     ord = p+1
-    fout = (2.0*r-s-p)/2 # or int((2*r-s-p)/2)
+    fout = (2*r-s-p)/2 # or int((2*r-s-p)/2)
     last = r-s
     first = r-p
     for t in range(num):
+        error("t = %d"%t)
         off = first-1
         temp[0] = Pw[off]
         temp[last+1-off] = Pw[last+1]
@@ -573,17 +660,12 @@ def remove_knot(curve, index, dest_mult, tol):
             j = j-1
             jj = jj-1
         if (j-i) < t:
-            if distance4D(temp[ii-1],temp[jj+1]) <= tol:
+            if temp[ii-1].distanceToPoint(temp[jj+1]) <= tol:
                 remflag = 1
         else:
             alfi = (u-U[i]) / (U[i+ord+t]-U[i])
-            print(alfi)
-            print(temp[ii+t+1])
-            print(temp[ii-1])
-            print(alfi*temp[ii+t+1])
-            print()
             point = alfi*temp[ii+t+1] + (1.0-alfi)*temp[ii-1]
-            if distance4D(Pw[i],point) <= tol:
+            if Pw[i].distanceToPoint(point) <= tol:
                 remflag = 1
         if remflag == 0:
             break
@@ -598,8 +680,8 @@ def remove_knot(curve, index, dest_mult, tol):
         first = first-1
         last = last+1
     if t == 0:
-        return(t,U,Pw)
-    for k in range(r+1,m+1):
+        return(None) #(t,U.__getslice__(0,len(U)-t),Pw.__getslice__(0,len(Pw)-t))
+    for k in range(r+1,m): # -----> range(r+1,m+1):
         U[k-t] = U[k]
     j = fout
     i = j
@@ -608,12 +690,17 @@ def remove_knot(curve, index, dest_mult, tol):
             i = i+1
         else:
             j = j-1
-    for k in range(i+1,n+1):
+    for k in range(i+1,n): # -----> range(i+1,n+1):
         Pw[j] = Pw[k]
         j = j+1
-    return(t,U,Pw)
+    knots, mults = knotSeqToKnotsMults(U.__getslice__(0,len(U)-t))
+    return(t,knots, mults,Pw.__getslice__(0,len(Pw)-t))
 
-
+def bs_remove_knot(curve, index, dest_mult, tol):
+    t, k, m, p = remove_knot(curve, index, dest_mult, tol)
+    bs = curve.copy()
+    bs.buildFromPolesMultsKnots(p, m, k, curve.isPeriodic(), curve.Degree)
+    return(bs)
             
                 
 
