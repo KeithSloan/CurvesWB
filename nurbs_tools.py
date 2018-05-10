@@ -311,8 +311,8 @@ def curvematch(c1, c2, par1, level=0, scale=1.0):
     - level (integer) is the level of continuity at join point (C0, G1, G2, G3, etc)
     - scale (float) is a scaling factor of the modified poles of curve C2
     newC2 = curvematch(C1, C2, par1, level=0, scale=1.0)'''
-    c1 = c1.toNurbs()
-    c2 = c2.toNurbs()
+    #c1 = c1.toNurbs()
+    #c2 = c2.toNurbs()
     len1 = c1.length()
     len2 = c2.length()
     # scale the knot vector of C2
@@ -405,9 +405,11 @@ class blendCurve(object):
         weights = [1.0 for k in range(nbPoles)]
         be = Part.BSplineCurve()
         be.buildFromPolesMultsKnots(poles, mults , knots, False, degree, weights, False)
-        nc = curvematch(self.edge1.Curve, be, self.param1, self.cont1, self.scale1)
+        c1 = self.edge1.Curve.toBSpline(self.edge1.FirstParameter, self.edge1.LastParameter)
+        nc = curvematch(c1, be, self.param1, self.cont1, self.scale1)
         rev = bspline_copy(nc, True, False)
-        self.Curve = curvematch(self.edge2.Curve, rev, self.param2, self.cont2, self.scale2)
+        c2 = self.edge2.Curve.toBSpline(self.edge2.FirstParameter, self.edge2.LastParameter)
+        self.Curve = curvematch(c2, rev, self.param2, self.cont2, self.scale2)
 
     def getPoles(self):
         self.compute()
