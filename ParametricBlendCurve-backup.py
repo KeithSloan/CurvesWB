@@ -13,8 +13,6 @@ import _utils
 from pivy import coin
 import nurbs_tools
 import CoinNodes
-import graphicsmod as graphics
-reload(graphics)
 
 TOOL_ICON = _utils.iconsPath() + '/blend.svg'
 debug = _utils.debug
@@ -99,53 +97,6 @@ class BlendCurveFP:
             return(4)
 
 
-class ConnectionMarker(graphics.Marker):
-    def __init__(self, points):
-        super(ConnectionMarker, self).__init__(points, True)
-
-
-class ConnectionPolygon(graphics.Polygon):
-    std_col = "green"
-    def __init__(self, markers):
-        super(ConnectionPolygon, self).__init__(
-            sum([m.points for m in markers], []), True)
-        self.markers = markers
-
-        for m in self.markers:
-            m.on_drag.append(self.updatePolygon)
-
-    def updatePolygon(self):
-        self.points = sum([m.points for m in self.markers], [])
-
-    @property
-    def drag_objects(self):
-        return self.markers
-
-    def check_dependency(self):
-        if any([m._delete for m in self.markers]):
-            self.delete()
-
-
-class ConnectionLine(graphics.Line):
-    def __init__(self, markers):
-        super(ConnectionLine, self).__init__(
-            sum([m.points for m in markers], []), True)
-        self.markers = markers
-        for m in self.markers:
-            m.on_drag.append(self.updateLine)
-
-    def updateLine(self):
-        self.points = sum([m.points for m in self.markers], [])
-
-    @property
-    def drag_objects(self):
-        return self.markers
-
-    def check_dependency(self):
-        if any([m._delete for m in self.markers]):
-            self.delete()
-
-
 class BlendCurveVP:
     def __init__(self, obj ):
         debug("VP init")
@@ -216,93 +167,12 @@ class BlendCurveVP:
             self.switch.whichChild = 0
         return(True)
 
-    def curve1_constraint(self, pt):
-        e1 = _utils.getShape(self.Object, "Edge1", "Edge")
-        v = Part.Vertex(FreeCAD.Vector(pt))
-        dist, pts, info = e1.distToShape(v)
-        np = pts[0][0]
-        p = info[0][2]
-        if p:
-            ra = e1.LastParameter - e1.FirstParameter
-            self.Object.Parameter1 = (p-e1.FirstParameter)/ra
-        return((np.x,np.y,np.z))
-
-    def curve2_constraint(self, pt):
-        e2 = _utils.getShape(self.Object, "Edge2", "Edge")
-        v = Part.Vertex(FreeCAD.Vector(pt))
-        dist, pts, info = e2.distToShape(v)
-        np = pts[0][0]
-        p = info[0][2]
-        if p:
-            ra = e2.LastParameter - e2.FirstParameter
-            self.Object.Parameter2 = (p-e2.FirstParameter)/ra
-        return((np.x,np.y,np.z))
-
-    def line1_constraint(self, pt):
-        e1 = _utils.getShape(self.Object, "Edge1", "Edge")
-        v = Part.Vertex(FreeCAD.Vector(pt))
-        real_par = e1.FirstParameter + self.Object.Parameter1 * (e1.LastParameter - e1.FirstParameter)
-        val = e1.valueAt(real_par)
-        tan = e1.tangentAt(real_par)
-        tan.multiply(1000)
-        initlen = 0
-        line = Part.makeLine(val-tan, val+tan)
-        dist, pts, info = line.distToShape(v)
-        np = pts[0][0]
-        #p = info[0][2]
-        #if p:
-            #ra = e1.LastParameter - e1.FirstParameter
-            #self.Object.Parameter1 = (p-e1.FirstParameter)/ra
-        return((np.x,np.y,np.z))
-
     def setEdit(self,vobj,mode):
         debug("Start Edit")
-        
-        self.Object.Edge1[0].ViewObject.Selectable = False
-        self.Object.Edge2[0].ViewObject.Selectable = False
-        vobj.Selectable = False
-        
-        view = FreeCADGui.ActiveDocument.ActiveView
-        viewer = view.getViewer()
-        rm = viewer.getSoRenderManager()
-        self.root = graphics.InteractionSeparator([rm])
-        self.root.pick_radius = 40
-        
-        endpoint_2 =   ConnectionMarker([[self.Object.CurvePts[ 0].x, self.Object.CurvePts[ 0].y, self.Object.CurvePts[ 0].z]])
-        scalepoint_2 = ConnectionMarker([[self.Object.CurvePts[ 1].x, self.Object.CurvePts[ 1].y, self.Object.CurvePts[ 1].z]])
-        endpoint_1 =   ConnectionMarker([[self.Object.CurvePts[-1].x, self.Object.CurvePts[-1].y, self.Object.CurvePts[-1].z]])
-        scalepoint_1 = ConnectionMarker([[self.Object.CurvePts[-2].x, self.Object.CurvePts[-2].y, self.Object.CurvePts[-2].z]])
-        
-        endpoint_1.constraints.append(self.curve1_constraint)
-        endpoint_2.constraints.append(self.curve2_constraint)
-        scalepoint_1.constraints.append(self.line1_constraint)
-        #scalepoint_2.constraints.append(self.line2_constraint)
-        
-        self.temp_len_1 = 1.0
-        self.temp_len_2 = 1.0
-        
-        poles = [endpoint_1, scalepoint_1, scalepoint_2, endpoint_2]
-        #cm.on_drag.append(nurbs.update)
-        #nurbs.markers[1].constraints.append(nurbs.line_constraint)
-
-        lines = []
-        for i in range(len(poles)-1):
-            lines.append( ConnectionLine([poles[i], poles[i+1]]) )
-        
-        self.root += poles + lines # + polygons
-        self.root.register()
-        self.sg.addChild(self.root)
         return(True)
 
     def unsetEdit(self,vobj,mode):
         debug("End Edit")
-        
-        self.Object.Edge1[0].ViewObject.Selectable = True
-        self.Object.Edge2[0].ViewObject.Selectable = True
-        vobj.Selectable = True
-        
-        self.root.unregister()
-        self.sg.removeChild(self.root)
         return(True)
 
     def getIcon(self):
