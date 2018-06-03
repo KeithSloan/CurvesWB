@@ -396,7 +396,7 @@ class blendCurve(object):
         be = Part.BSplineCurve()
         be.buildFromPolesMultsKnots(poles, mults , knots, False, degree, weights, False)
         nc = curvematch(self.edge1, be, self.param1, self.cont1, self.scale1)
-        rev = bspline_copy(nc, True, False)
+        rev = bspline_copy(nc, True)
         self.Curve = curvematch(self.edge2, rev, self.param2, self.cont2, self.scale2)
 
     def getPoles(self):

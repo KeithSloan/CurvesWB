@@ -145,6 +145,97 @@ class ConnectionLine(graphics.Line):
         if any([m._delete for m in self.markers]):
             self.delete()
 
+class Manipulator(object):
+    def __init__(self, blendcurveFP):
+        self.fp = blendcurveFP
+        self.ep2 = ConnectionMarker([self.coords(blendcurveFP.CurvePts[0])])
+        self.ta2 = ConnectionMarker([self.coords(blendcurveFP.CurvePts[1])])
+        self.ep1 = ConnectionMarker([self.coords(blendcurveFP.CurvePts[-1])])
+        self.ta1 = ConnectionMarker([self.coords(blendcurveFP.CurvePts[-2])])
+        self.poles = [self.ep1, self.ta1, self.ta2, self.ep2]
+        
+        self.ep1.constraints.append(self.curve1_constraint)
+        self.ep2.constraints.append(self.curve2_constraint)
+        self.ta1.constraints.append(self.line1_constraint)
+        self.ta2.constraints.append(self.line2_constraint)
+        
+        #self.ta1.on_drag.append(self.update_ta1)
+        self.ta1.on_drag_start.append(self.record_tangents)
+        self.ta2.on_drag_start.append(self.record_tangents)
+        
+    def coords(self, vec):
+        return((vec.x, vec.y, vec.z))
+    
+    def record_tangents(self):
+        self.tan1 = (self.fp.CurvePts[1]-self.fp.CurvePts[0]).Length
+        self.tan2 = (self.fp.CurvePts[-2]-self.fp.CurvePts[-1]).Length
+    
+    def update_ta1(self):
+        self.ta1.points = [self.coords(self.fp.CurvePts[-2])]
+ 
+    def update_ta2(self):
+        self.ta2.points = [self.coords(self.fp.CurvePts[1])]
+ 
+    def curve1_constraint(self, pt):
+        e1 = _utils.getShape(self.fp, "Edge1", "Edge")
+        v = Part.Vertex(FreeCAD.Vector(pt))
+        dist, pts, info = e1.distToShape(v)
+        np = pts[0][0]
+        p = info[0][2]
+        if p:
+            ra = e1.LastParameter - e1.FirstParameter
+            self.fp.Parameter1 = (p-e1.FirstParameter)/ra
+            self.update_ta1()
+        return((np.x,np.y,np.z))
+
+    def curve2_constraint(self, pt):
+        e1 = _utils.getShape(self.fp, "Edge2", "Edge")
+        v = Part.Vertex(FreeCAD.Vector(pt))
+        dist, pts, info = e1.distToShape(v)
+        np = pts[0][0]
+        p = info[0][2]
+        if p:
+            ra = e1.LastParameter - e1.FirstParameter
+            self.fp.Parameter2 = (p-e1.FirstParameter)/ra
+            self.update_ta2()
+        return((np.x,np.y,np.z))
+
+
+    def line1_constraint(self, pt):
+        e1 = _utils.getShape(self.fp, "Edge1", "Edge")
+        v = Part.Vertex(FreeCAD.Vector(pt))
+        real_par = e1.FirstParameter + self.fp.Parameter1 * (e1.LastParameter - e1.FirstParameter)
+        val = e1.valueAt(real_par)
+        tan = e1.tangentAt(real_par)
+        tan.multiply(1000)
+        line = Part.makeLine(val-tan, val+tan)
+        dist, pts, info = line.distToShape(v)
+        np = pts[0][0]
+        new_length = (np-val).Length
+        ratio = new_length / self.tan1
+        self.fp.Scale1 *= ratio
+        #p = info[0][2]
+        #if p:
+            #ra = e1.LastParameter - e1.FirstParameter
+            #self.Object.Parameter1 = (p-e1.FirstParameter)/ra
+        return((np.x,np.y,np.z))
+
+    def line2_constraint(self, pt):
+        e1 = _utils.getShape(self.fp, "Edge2", "Edge")
+        v = Part.Vertex(FreeCAD.Vector(pt))
+        real_par = e1.FirstParameter + self.fp.Parameter2 * (e1.LastParameter - e1.FirstParameter)
+        val = e1.valueAt(real_par)
+        tan = e1.tangentAt(real_par)
+        tan.multiply(1000)
+        initlen = 0
+        line = Part.makeLine(val-tan, val+tan)
+        dist, pts, info = line.distToShape(v)
+        np = pts[0][0]
+        #p = info[0][2]
+        #if p:
+            #ra = e1.LastParameter - e1.FirstParameter
+            #self.Object.Parameter1 = (p-e1.FirstParameter)/ra
+        return((np.x,np.y,np.z))
 
 class BlendCurveVP:
     def __init__(self, obj ):
@@ -216,45 +307,6 @@ class BlendCurveVP:
             self.switch.whichChild = 0
         return(True)
 
-    def curve1_constraint(self, pt):
-        e1 = _utils.getShape(self.Object, "Edge1", "Edge")
-        v = Part.Vertex(FreeCAD.Vector(pt))
-        dist, pts, info = e1.distToShape(v)
-        np = pts[0][0]
-        p = info[0][2]
-        if p:
-            ra = e1.LastParameter - e1.FirstParameter
-            self.Object.Parameter1 = (p-e1.FirstParameter)/ra
-        return((np.x,np.y,np.z))
-
-    def curve2_constraint(self, pt):
-        e2 = _utils.getShape(self.Object, "Edge2", "Edge")
-        v = Part.Vertex(FreeCAD.Vector(pt))
-        dist, pts, info = e2.distToShape(v)
-        np = pts[0][0]
-        p = info[0][2]
-        if p:
-            ra = e2.LastParameter - e2.FirstParameter
-            self.Object.Parameter2 = (p-e2.FirstParameter)/ra
-        return((np.x,np.y,np.z))
-
-    def line1_constraint(self, pt):
-        e1 = _utils.getShape(self.Object, "Edge1", "Edge")
-        v = Part.Vertex(FreeCAD.Vector(pt))
-        real_par = e1.FirstParameter + self.Object.Parameter1 * (e1.LastParameter - e1.FirstParameter)
-        val = e1.valueAt(real_par)
-        tan = e1.tangentAt(real_par)
-        tan.multiply(1000)
-        initlen = 0
-        line = Part.makeLine(val-tan, val+tan)
-        dist, pts, info = line.distToShape(v)
-        np = pts[0][0]
-        #p = info[0][2]
-        #if p:
-            #ra = e1.LastParameter - e1.FirstParameter
-            #self.Object.Parameter1 = (p-e1.FirstParameter)/ra
-        return((np.x,np.y,np.z))
-
     def setEdit(self,vobj,mode):
         debug("Start Edit")
         
@@ -268,28 +320,13 @@ class BlendCurveVP:
         self.root = graphics.InteractionSeparator([rm])
         self.root.pick_radius = 40
         
-        endpoint_2 =   ConnectionMarker([[self.Object.CurvePts[ 0].x, self.Object.CurvePts[ 0].y, self.Object.CurvePts[ 0].z]])
-        scalepoint_2 = ConnectionMarker([[self.Object.CurvePts[ 1].x, self.Object.CurvePts[ 1].y, self.Object.CurvePts[ 1].z]])
-        endpoint_1 =   ConnectionMarker([[self.Object.CurvePts[-1].x, self.Object.CurvePts[-1].y, self.Object.CurvePts[-1].z]])
-        scalepoint_1 = ConnectionMarker([[self.Object.CurvePts[-2].x, self.Object.CurvePts[-2].y, self.Object.CurvePts[-2].z]])
+        manip = Manipulator(self.Object)
         
-        endpoint_1.constraints.append(self.curve1_constraint)
-        endpoint_2.constraints.append(self.curve2_constraint)
-        scalepoint_1.constraints.append(self.line1_constraint)
-        #scalepoint_2.constraints.append(self.line2_constraint)
-        
-        self.temp_len_1 = 1.0
-        self.temp_len_2 = 1.0
-        
-        poles = [endpoint_1, scalepoint_1, scalepoint_2, endpoint_2]
-        #cm.on_drag.append(nurbs.update)
-        #nurbs.markers[1].constraints.append(nurbs.line_constraint)
-
         lines = []
-        for i in range(len(poles)-1):
-            lines.append( ConnectionLine([poles[i], poles[i+1]]) )
+        for i in range(len(manip.poles)-1):
+            lines.append( ConnectionLine([manip.poles[i], manip.poles[i+1]]) )
         
-        self.root += poles + lines # + polygons
+        self.root += manip.poles + lines # + polygons
         self.root.register()
         self.sg.addChild(self.root)
         return(True)
