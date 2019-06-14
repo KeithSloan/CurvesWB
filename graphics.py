@@ -1,16 +1,19 @@
 from pivy import coin
 #from pivy.utils import getPointOnScreen
 
-def getPointOnScreen(render_manager, screen_pos, normal="camera", point=None):
+def getPointOnScreen(action, pos, normal="camera", point=None):
     """get coordinates from pixel position"""
     
-    pCam = render_manager.getCamera()
-    vol = pCam.getViewVolume()
-
+    #pCam = render_manager.getCamera()
+    #vol = pCam.getViewVolume()
+    #action = event_callback.getAction()
+    state = action.getState()
+    view_volume = coin.SoViewVolumeElement.get(state)
+    vp_region = coin.SoViewportRegionElement.get(state)
     point = point or coin.SbVec3f(0, 0, 0)
 
     if normal == "camera":
-        plane = vol.getPlane(10)
+        plane = view_volume.getPlane(10)
         normal = plane.getNormal()
     elif normal == "x":
         normal = SbVec3f(1, 0, 0)
@@ -19,14 +22,14 @@ def getPointOnScreen(render_manager, screen_pos, normal="camera", point=None):
     elif normal == "z":
         normal = SbVec3f(0, 0, 1)
     normal.normalize()
-    x, y = screen_pos
-    vp = render_manager.getViewportRegion()
-    size = vp.getViewportSize()
+    x, y = pos
+    #vp = render_manager.getViewportRegion()
+    size = vp_region.getViewportSize()
     dX, dY = size
 
-    fRatio = vp.getViewportAspectRatio()
-    pX = float(x) / float(vp.getViewportSizePixels()[0])
-    pY = float(y) / float(vp.getViewportSizePixels()[1])
+    fRatio = vp_region.getViewportAspectRatio()
+    pX = float(x) / float(vp_region.getViewportSizePixels()[0])
+    pY = float(y) / float(vp_region.getViewportSizePixels()[1])
 
     if (fRatio > 1.0):
         pX = (pX - 0.5 * dX) * fRatio + 0.5 * dX
@@ -34,7 +37,7 @@ def getPointOnScreen(render_manager, screen_pos, normal="camera", point=None):
         pY = (pY - 0.5 * dY) / fRatio + 0.5 * dY
 
     plane = coin.SbPlane(normal, point)
-    line = coin.SbLine(*vol.projectPointToLine(coin.SbVec2f(pX,pY)))
+    line = coin.SbLine(*view_volume.projectPointToLine(coin.SbVec2f(pX,pY)))
     pt = plane.intersect(line)
     return(pt)
 
@@ -284,33 +287,42 @@ class InteractionSeparator(coin.SoSeparator):
     def highlightCB(self, attr, event_callback):
         event = event_callback.getEvent()
         pos = event.getPosition()
-        obj = self.sendRay(pos)
-        self.highlightObject(obj)
+        action = self.events.getAction()
+        #vpr = action.getViewportRegion()
+        #state = action.getState()
+        #vv = coin.SoViewVolumeElement(state)
+        #print(vpr)
+        #obj = self.sendRay(pos)
+        pp = event_callback.getPickedPoint()
+        #pp = self.sendRay(action, pos)
+        if pp:
+            print(pp.getObjectPoint().getValue())
+            #self.objByID(pp)
+            self.highlightObject(self.objByID(pp))
 
-    def sendRay(self, mouse_pos):
-        """sends a ray trough the scene and return the nearest entity"""
-        ray_pick = coin.SoRayPickAction(self.render_manager.getViewportRegion())
-        ray_pick.setPoint(coin.SbVec2s(*mouse_pos))
-        ray_pick.setRadius(InteractionSeparator.pick_radius)
-        ray_pick.setPickAll(True)
-        ray_pick.apply(self.render_manager.getSceneGraph())
-        picked_point = ray_pick.getPickedPointList()
-        return self.objByID(picked_point)
+    #def sendRay(self, action, mouse_pos):
+        #"""sends a ray trough the scene and return the nearest entity"""
+        #print("mouse_pos %d x %d"%(mouse_pos[0],mouse_pos[1]))
+        #state = action.getState()
+        #ray_pick = coin.SoRayPickAction(coin.SoViewportRegionElement.get(state))
+        #ray_pick.setPoint(coin.SbVec2s(*mouse_pos))
+        #ray_pick.setRadius(InteractionSeparator.pick_radius)
+        #ray_pick.setPickAll(True)
+        #ray_pick.apply(self.render_manager.getSceneGraph())
+        #picked_point = ray_pick.getPickedPoint()
+        #return picked_point
+        #return self.objByID(picked_point)
 
-    def objByID(self, picked_point):
-        for point in picked_point:
-            path = point.getPath()
-            length = path.getLength()
-            point = path.getNode(length - 2)
-            for o in self.dynamic_objects:
-                if point == o:
-                    return(o)
-            # Code below was not working with python 2.7 (pb with getNodeId ?)
-            #point = list(filter(
-                #lambda ctrl: ctrl.getNodeId() == point.getNodeId(),
-                #self.dynamic_objects))
-            #if point != []:
-                #return point[0]
+    def objByID(self, point):
+        path = point.getPath()
+        #print(path)
+        length = path.getLength()
+        #print(length)
+        point = path.getNode(length - 2)
+        print(point)
+        for o in self.dynamic_objects:
+            if point == o:
+                return o
         return None
         
 
@@ -333,9 +345,11 @@ class InteractionSeparator(coin.SoSeparator):
         event = event_callback.getEvent()
         if (event.getState() == coin.SoMouseButtonEvent.DOWN and
                 event.getButton() == event.BUTTON1):
-            pos = event.getPosition()
-            obj = self.sendRay(pos)
-            self.selectObject(obj, event.wasCtrlDown())
+            #pos = event.getPosition()
+            #obj = self.sendRay(pos)
+            pp = event_callback.getPickedPoint()
+            if pp:
+                self.selectObject(self.objByID(pp), event.wasCtrlDown())
 
     def select_all_cb(self, event_callback):
         event = event_callback.getEvent()
@@ -383,10 +397,12 @@ class InteractionSeparator(coin.SoSeparator):
 
 #------------------------INTERACTION------------------------#
 
-    def cursor_pos(self, event):
-        pos = event.getPosition()
-        # print(list(getPointOnScreen1(self.render_manager, pos)))
-        return getPointOnScreen(self.render_manager, pos)
+    def cursor_pos(self, action, pos):
+        #pos = event.getPosition()
+        #state = action.getState()
+        #vv = coin.SoViewVolumeElement.get(state)
+        #print(vv.getProjectionDirection().getValue())
+        return getPointOnScreen(action, pos)
     
 
     def constrained_vector(self, vector):
@@ -408,7 +424,11 @@ class InteractionSeparator(coin.SoSeparator):
         if (event.getState() == coin.SoMouseButtonEvent.DOWN and
                 event.getButton() == event.BUTTON1):
             pos = event.getPosition()
-            obj = self.sendRay(pos)
+            action = event_callback.getAction()
+            pp = event_callback.getPickedPoint()
+            obj = None
+            if pp:
+                obj = self.objByID(pp)
             if obj:
                 #if not obj in self.selected_objects:
                     #self.selectObject(obj, event.wasCtrlDown())
@@ -421,7 +441,7 @@ class InteractionSeparator(coin.SoSeparator):
                     # first delete the selection_cb, and higlight_cb
                     self.unregister()
                     # now add a callback that calls the dragfunction of the selected entites
-                    self.start_pos = self.cursor_pos(event)
+                    self.start_pos = self.cursor_pos(action, pos)
                     self._dragCB = self.events.addEventCallback(
                         coin.SoEvent.getClassTypeId(), self.dragCB)
                     for obj in self.drag_objects:
@@ -431,6 +451,8 @@ class InteractionSeparator(coin.SoSeparator):
 
     def dragCB(self, attr, event_callback, force=False):
         event = event_callback.getEvent()
+        pos = event.getPosition()
+        action = event_callback.getAction()
         if ((type(event) == coin.SoMouseButtonEvent and
                 event.getState() == coin.SoMouseButtonEvent.UP
                 and event.getButton() == coin.SoMouseButtonEvent.BUTTON1) or 
@@ -465,7 +487,7 @@ class InteractionSeparator(coin.SoSeparator):
                 self._direction = key
             else:
                 self._direction = None
-            diff = self.cursor_pos(event) - self.start_pos
+            diff = self.cursor_pos(action, pos) - self.start_pos
             diff = self.constrained_vector(diff)
             for obj in self.drag_objects:
                 obj.drag(diff, 1)
@@ -474,7 +496,8 @@ class InteractionSeparator(coin.SoSeparator):
 
         elif type(event) == coin.SoLocation2Event:
             fact = 0.1 if event.wasShiftDown() else 1.
-            diff = self.cursor_pos(event) - self.start_pos
+            
+            diff = self.cursor_pos(action, pos) - self.start_pos
             diff = self.constrained_vector(diff)
             for obj in self.drag_objects:
                 obj.drag(diff, fact)

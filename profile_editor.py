@@ -240,7 +240,7 @@ class InterpoCurveEditor(object):
         else:
             if not FreeCADGui.ActiveDocument:
                 appdoc = FreeCAD.newDocument("New")
-        self.guidoc = FreeCADGui.ActiveDocument
+            self.guidoc = FreeCADGui.ActiveDocument
         self.view = self.guidoc.ActiveView
         self.rm = self.view.getViewer().getSoRenderManager()
         self.sg = self.view.getSceneGraph()
@@ -261,15 +261,15 @@ class InterpoCurveEditor(object):
         self._controlCB = self.root.events.addEventCallback(coin.SoKeyboardEvent.getClassTypeId(), self.controlCB)
         # populate root node
         #self.root.addChild(self.events)
-        self.root += self.points
         self.build_lines()
+        self.root += self.points
         self.root += self.lines
         # set FreeCAD color scheme
         for o in self.points + self.lines:
             o.ovr_col = "yellow"
             o.sel_col = "green"
         self.root.register()
-        self.sg.addChild(self.root)
+        self.sg.insertChild(self.root,0)
         self.root_inserted = True
         self.root.selected_objects = list()
 
