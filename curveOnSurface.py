@@ -90,6 +90,14 @@ def get_offset_curve(bc,c1,c2,dist=0.1):
     d1 = c1.parameter(startPoint(bc))
     par2 = c2
 
+def shift_poles(bs, u, v):
+    nbs = bs.copy()
+    for i in range(bs.NbPoles):
+        p = bs.getPole(i+1)
+        np = Base.Vector2d(p.x+u,p.y+v)
+        nbs.setPole(i+1,np)
+    return nbs
+
 class curveOnSurface:
     
     def __init__(self, edge = None, face = None):
@@ -171,20 +179,47 @@ class curveOnSurface:
                         for e in newedges[1:]:
                             c2d,fp,lp = newface.curveOnSurface(e)
                             bs = c2d.toBSpline(fp,lp)
-                            c.join(bs)
-                        c2d = [c,c.FirstParameter,c.LastParameter]
+                            jr = c.join(bs)
+                            if not jr:
+                                if self.face.Surface.isUPeriodic():
+                                    per = self.face.Surface.UPeriod()
+                                    print("CurveOnSurface U period : {}".format(per))
+                                    nbs = shift_poles(bs, per, 0)
+                                    print(c.NbPoles)
+                                    jr2 = c.join(nbs)
+                                    print(c.NbPoles)
+                                    if not jr2:
+                                        nbs = shift_poles(bs, -per, 0)
+                                        print(c.NbPoles)
+                                        jr3 = c.join(nbs)
+                                        print(c.NbPoles)
+                                        if not jr3:
+                                            print("CurveOnSurface U period shifting : Failed.")
+                                elif self.face.Surface.isVPeriodic():
+                                    per = self.face.Surface.VPeriod()
+                                    print("CurveOnSurface V period : {}".format(per))
+                                    nbs = shift_poles(bs, 0, per)
+                                    jr2 = c.join(nbs)
+                                    if not jr2:
+                                        nbs = shift_poles(bs, 0, -per)
+                                        jr3 = c.join(nbs)
+                                        if not jr3:
+                                            print("CurveOnSurface V period shifting : Failed.")
+                        c2d = [c, c.FirstParameter, c.LastParameter]
                     print("CurveOnSurface projection fallback : OK.")
+                    print(c2d)
                 except Part.OCCError:
                     print("CurveOnSurface projection fallback : Failed.")
             if isinstance(c2d,tuple):
                 self.curve2D = c2d[0]
                 self.firstParameter = c2d[1]
                 self.lastParameter  = c2d[2]
-                self.edgeOnFace = self.curve2D.toShape(self.face, self.firstParameter, self.lastParameter)
+                self.edgeOnFace = self.curve2D.toShape(self.face.Surface, self.firstParameter, self.lastParameter)
 
                 if isinstance(self.edgeOnFace, Part.Edge):
                     self.isValid = True
                 else:
+                    print("CurveOnSurface : Failed to create edgeOnFace.")
                     self.isValid = False
                     self.edgeOnFace = Part.Edge(self.edge.Curve, self.firstParameter, self.lastParameter)
             else:
