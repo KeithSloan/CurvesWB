@@ -112,12 +112,12 @@ class SketchOn2RailsFP:
             loc2 = e2.valueAt(p2)
             
             # obj.Normal == "Rail1"
-            z = e1.tangentAt(p1)
+            z = - e1.tangentAt(p1)
             x = loc2-loc1
             loc = loc1
             
             if obj.Normal == "Rail2":
-                z = e2.tangentAt(p2)
+                z = - e2.tangentAt(p2)
                 x = loc1-loc2
                 loc = loc2
             #elif obj.Normal == "Average":
